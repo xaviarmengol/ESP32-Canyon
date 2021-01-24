@@ -6,10 +6,14 @@
 
 void waitUntilSetupEnds(int tskNum);
 
+// Task Periodic timer to fire Period Timers
+void tskPeriodicTimer (void *pvParameters);
+
 // Task fordward declaration. Can be in a hpp file
 void tskPosition (void *pvParameters);
 void tskWifi (void *pvParameters);
 void tskDebug (void *pvParameters);
+
 
 void setup() {
 
@@ -36,9 +40,12 @@ void setup() {
     // Mode management
     gModeNum.set(ModeRun::STOP);
 
+    // Periodic timer
+    TaskHandle_t periodicTimerHandler;
+
     // Initialitze Async Queues object
     for (int i=0; i<TaskNames::TOTAL_TASK; i++) {
-        tasksManager[i] = AsyncTask((taskNames_t)i, 10); // Create objects
+        tasksManager[i] = AsyncTask((taskNames_t)i, 1000); // Create objects
     }
 
     // TODO: Understant what is the best core asignment strategy
@@ -52,6 +59,11 @@ void setup() {
     waitUntilSetupEnds(POSITION);
     
     xTaskCreateUniversal(tskDebug, "TaskDebug", 10000, NULL, 0, tasksManager[DEBUG].getTaskHandler(), 1);
+    waitUntilSetupEnds(DEBUG);
+
+    // Periodic timer fires messages at some freq.
+
+    xTaskCreateUniversal(tskPeriodicTimer, "PERIODIC_TIMER", 10000, NULL, 0, &periodicTimerHandler, 1);
     waitUntilSetupEnds(DEBUG);
 
     Serial.println("Setup end");

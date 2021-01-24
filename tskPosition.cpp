@@ -15,8 +15,8 @@ constexpr int POSITION_SERVO_HIGH = 82;
 // TODO: Could be static inside the State Machine
 enum struct ModeFire {search, toFire, fire, toSeach};
 
-void stateMachine();
-void fireControlCalc();
+void stateMachine(taskNames_t taskName);
+void fireControl(int modeNum, int lidarDist);
 void calibrateServos();
 void calcTargetXY (int angle, int dist);
 
@@ -26,13 +26,15 @@ servoControl servoFire;
 
 FlankFilter flankCalibrate(true);
 
+
 void tskPosition(void *pvParameters){
 
     Wire.begin(); 
 
     // SETUP or the task
     Serial.println("Task Position on core: " + String(xPortGetCoreID()));
-    int taskId = static_cast<int>(TaskNames::POSITION);
+    TaskNames taskName = TaskNames::POSITION;
+    int taskId = static_cast<int>(taskName);
 
     int32_t periodMs = 20;
 
@@ -51,17 +53,15 @@ void tskPosition(void *pvParameters){
    
     while(1) {
 
-        if(tasksManager[taskId].hasPeriodElapsed()) {
+        if(tasksManager[taskId].hasPeriodElapsedWithExternalTimer()) {
+
             lidar.update();
             lidarDist = lidar.getDistance() / 10; // cm
-            //Serial.println(lidarDist);
             gLidarDist.set(lidarDist);
 
-            calcTargetXY(gInpElev.get(), lidarDist);
+            fireControl(gModeNum.get(), lidarDist);
 
-            fireControlCalc();
-
-            stateMachine();
+            stateMachine(taskName);
 
             gPeriodBusy[taskId].set(tasksManager[taskId].getBusyPercentage());
         }
@@ -86,73 +86,52 @@ void calibrateServos() {
 }
 
 
-
-void calcTargetXY (int angle, int dist) {
-
-    gXTargetLidar.set((int)(cos(angle * (PI / 180)) * dist));
-
-    gYTargetLidar.set((int)(sin(angle * (PI / 180)) * dist));
-
-}
-
-
-
-void fireControlCalc() {
-
-    int xTarget = gXTarget.get();
-    int yTarget = gYTarget.get();
-    int modeNum = gModeNum.get();
+void fireControl(int modeNum, int lidarDist) {
     
-    int xTargetLidar = gXTargetLidar.get();
-    int yTargetLidar = gYTargetLidar.get();
+    if (modeNum == ModeRun::AUTO or modeNum == ModeRun::LASER) {
 
-    int angleTarget = gAngleTarget.get();
-    int lidarDist = gLidarDist.get();
+        int xTarget = 0;
+        int yTarget = 0;
 
-    int calv0 = gCalv0.get();
+        if (modeNum == ModeRun::AUTO) {
+            xTarget = gXAuto.get();
+            yTarget = gYAuto.get();
+        } else if (modeNum == ModeRun::LASER) {
+            int inpElev = gInpElev.get();
+            xTarget = (int)(cos(inpElev * DEG_TO_RAD ) * lidarDist);
+            yTarget = (int)(sin(inpElev * DEG_TO_RAD ) * lidarDist);
+        }
 
-    int xAuto = gXAuto.get();
-    int yAuto = gYAuto.get();
+        int solIni;
+        bool solutionFound;
 
-    bool fireAllowed = gFireAllowed.get();
+        if (gHighTraj.get() == 1) solIni=85; else solIni=15;
 
-    int solIni;
-    bool solutionFound;
+        int calv0 = gCalv0.get();
 
-    if (gHighTraj.get() == 1) solIni=85;
-    else solIni=15;
+        int angleTarget = newtonMethod(xTarget, yTarget, (float)(calv0/100.0), solIni, solutionFound);
+        if (!solutionFound) angleTarget = 0;
+        
+        bool fireAllowed = solutionFound && (lidarDist<=195 || modeNum==3);
 
-    if (modeNum == ModeRun::AUTO) {
-        xTarget = xAuto;
-        yTarget = yAuto;
+        gXTarget.set(xTarget);
+        gYTarget.set(yTarget);
 
-    } if (modeNum == ModeRun::LASER) {
-        xTarget = xTargetLidar;
-        yTarget = yTargetLidar;
+        gAngleTarget.set(angleTarget);
+        gFireAllowed.set(fireAllowed);
+
     }
-
-    angleTarget = newtonMethod(xTarget, yTarget, (float)(calv0/100.0), solIni, solutionFound);
-
-    if (!solutionFound) angleTarget = 0;
-    fireAllowed = solutionFound && (lidarDist<=195 || modeNum==3);
-
-    gAngleTarget.set(angleTarget);
-    gFireAllowed.set(fireAllowed);
-
-    gXTarget.set(xTarget);
-    gYTarget.set(yTarget);
          
 }
 
 
-
-void stateMachine() {
+void stateMachine(taskNames_t taskName) {
 
     int modeNum = gModeNum.get();
     int inpRot = gInpRot.get();
     int inpElev = gInpElev.get();
     int inpFire = gInpFire.get();
-    int rotTarget = gRotTarget.get();
+    //int rotTarget = gRotTarget.get();
     int angleTarget = gAngleTarget.get();
     bool fireAllowed = gFireAllowed.get();
 
@@ -202,7 +181,7 @@ void stateMachine() {
 
             servoFire.setTwoPositionsMode(POSITION_SERVO_LOW + gCalFire.get(), POSITION_SERVO_HIGH + gCalFire.get());
 
-            tasksManager[taskNames_t::WIFI].sendMessage(asyncMsg_t::RESET_CALIB);            
+            tasksManager[taskNames_t::WIFI].sendMessage(AsyncMsg::RESET_CALIB, taskName);            
         }
 
 
@@ -225,7 +204,8 @@ void stateMachine() {
 
                     // should be fixed to avoid changes during shoting phase
 
-                    rotDest = rotTarget;
+                    //rotDest = rotTarget;
+                    rotDest = inpRot;
                     elevDest = angleTarget;
 
                 } else {

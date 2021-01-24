@@ -21,9 +21,9 @@ bool FlankFilter::filter(bool currentValue) {
     bool returnValue = false;
 
     if (_lastValue!=currentValue) {
-        if(_lastValue==false & _flankUp) {
+        if(!_lastValue and _flankUp) {
             returnValue = true;
-        } else if (_lastValue==true & !_flankUp) {
+        } else if (_lastValue and !_flankUp) {
             returnValue = true;
         }
         _lastValue = currentValue;

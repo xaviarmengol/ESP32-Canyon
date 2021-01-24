@@ -1,19 +1,23 @@
 #include "AsyncTask.hpp"
 
+/// Crear una interrupció periòdica que envii un missatge de "Periode" a cada tasca
+/// D'aquesta manera la tasca simplement es un receptor de missatges
+///https://techtutorialsx.com/2017/10/07/esp32-arduino-timer-interrupts/#:~:text=The%20ESP32%20has%20two%20timer,the%20timer%20counter%20%5B2%5D.
+
+
 AsyncTask::AsyncTask() {}
 
 AsyncTask::AsyncTask(taskNames_t taskName, unsigned long waitMs) {
     _taskName = taskName;
     _periodMs = waitMs;
-    _queue = xQueueCreate( MAX_QUEUE , sizeof(asyncMsg_t));
-    if (_queue == 0 ) Serial.println("Failed to create Queue");
-    Serial.println((int)_queue);
-    Serial.println("Queue created!");
+    _queue = xQueueCreate( MAX_QUEUE , sizeof(msgQueue_t));
+    if (_queue == 0 ) {
+        Serial.println("Failed to create Queue");
+    } else {
+        Serial.print("Queue created: ");
+        Serial.println((int)_queue);
+    }
 }
-
-//AsyncTask::AsyncTask(int taskNum, unsigned long waitMs) {
-//    AsyncTask(static_cast<taskNames_t>(taskNum), waitMs);
-//}
 
 AsyncTask::~AsyncTask() {
 }
@@ -22,66 +26,67 @@ TaskHandle_t* AsyncTask::getTaskHandler() {
     return(&_taskHandler);
 }
 
-void AsyncTask::setAsyncMsgCallBack(std::function<void(asyncMsg_t)> fManageAsyncMsg) {
-    if (fManageAsyncMsg) _fManageAsyncMsg = fManageAsyncMsg;
-}
 
-bool AsyncTask::sendMessage(asyncMsg_t* ptrMsg) {
-    Serial.print("Sending message: ");
-    Serial.println((int)*ptrMsg);
-    return(xQueueSend(_queue, ptrMsg, 0) == pdTRUE);
-}
+bool AsyncTask::sendMessage(asyncMsg_t msg, taskNames_t taskFrom, int32_t index, int32_t value) {
 
-bool AsyncTask::sendMessage(asyncMsg_t msg) {
-    _asyncMsgToSend = msg;
+    bool returnValue=false;
 
-    Serial.print("Sending message: ");
-    Serial.println((int)_asyncMsgToSend);
-    return(xQueueSend(_queue, &_asyncMsgToSend, 0) == pdTRUE);
-}
+    _msgQueueToSend = {msg, taskFrom, index, value};
+    returnValue = (xQueueSend(_queue, &_msgQueueToSend, 0) == pdTRUE);
 
-bool AsyncTask::hasPeriodElapsed(std::function<void(asyncMsg_t)> fManageAsyncMsg) {
-
-
-    setAsyncMsgCallBack(fManageAsyncMsg);
-
-    // TODO: Review if necessary to delay some ticks
-
-    // Check if there is a new message in the queue
-    //Serial.println("Before Queue Receive");
-    if (_queue == 0 ) Serial.println("Queue NOT well created");
-    //Serial.println((int)_queue);
-    _newValue = (xQueueReceive(_queue, &_asyncMsgReceived, pdMS_TO_TICKS(DEFAULT_MIN_WAIT_TASK_MS)) == pdTRUE);
-    //Serial.println("After Queue Receive");
-
-    // if new message, and we have an informed call back, process it.
-    if (_newValue && _fManageAsyncMsg) {
-        Serial.print("Message received: ");
-        Serial.println((int)_asyncMsgReceived);
-
-        _startAsyncMsgMicros = micros();
-        _fManageAsyncMsg(_asyncMsgReceived);
-        _periodAsyncMsgMicros += micros() - _startAsyncMsgMicros;
+    if (taskFrom != TaskNames::_TIMER) {
+        Serial.print("Sending message: ");
+        if (!returnValue) Serial.print("ERROR "); else Serial.print("OK ");
+        printMessage(_msgQueueToSend);
     }
+    
 
-    // If the period algorithm has been executed
+    return(returnValue);
+}
+
+bool AsyncTask::hasPeriodElapsedWithExternalTimer() {
+    if (_queue == 0 ) {
+        Serial.println("Queue NOT well created");
+    } 
+
+    // Last iteration was due to the end of the period
     if (_periodElapsed) {
         _periodBusyMicros = micros() - _startBusyMicros;
-        _periodElapsed = false;
-        _periodBusyPercentage = (_periodBusyMicros + _periodAsyncMsgMicros)  / (_periodMs * 10); // (100 / 1000) 
     }
 
-    // The period has elapsed
-    if ((micros() - _lastMicros) > (_periodMs * 1000)) {
-        _lastMicros = micros();
-        _periodElapsed = true;
+    // Last iteration was due to a new value coming from the Queue
+    if (!_periodElapsed) {
+        _periodAsyncMsgMicros = micros() - _startAsyncMsgMicros;
+        _totalPeriodAsyncMicros += _periodAsyncMsgMicros;
+    }
+
+    // Block until Message
+    xQueueReceive(_queue, &_msgQueueReceived, portMAX_DELAY);
+
+    if (_msgQueueReceived.taskFrom != TaskNames::_TIMER) {
+        Serial.print("Receiving message: ");
+        printMessage(_msgQueueReceived);
+    }
+    
+    _periodElapsed = (_msgQueueReceived.msg == AsyncMsg::PERIOD_TIME_OUT);
+
+    // New message received
+    if (!_periodElapsed) {
+        _startAsyncMsgMicros = micros();
+
+        _asyncMsgReceived = _msgQueueReceived.msg;
+        _taskFromMsgReceived = _msgQueueReceived.taskFrom;
+        _indexMsgReceived = _msgQueueReceived.index;
+        _valueMsgReceived = _msgQueueReceived.value;
+
+    // End of period. Starting again the cyclic execution.
+    } else {
+        _periodBusyPercentage = static_cast<int>((_periodBusyMicros + _totalPeriodAsyncMicros)  / (_periodMs * 10)); // (100 / 1000)
         _startBusyMicros = micros();
-        _periodAsyncMsgMicros = 0; // Re-start async message managament accumulative time counter
+        _totalPeriodAsyncMicros = 0; // Reset the totals
     }
-
 
     return(_periodElapsed);
-    
 }
 
 
@@ -89,11 +94,29 @@ asyncMsg_t AsyncTask::getLastValidAsyncMsg() {
     return(_asyncMsgReceived);
 }
 
-
 void AsyncTask::modifyWaitMs(unsigned long newMs) {
     _periodMs = newMs;
 }
 
+unsigned long AsyncTask::getWaitMs() {
+    return(_periodMs);
+}
+
 int AsyncTask::getBusyPercentage() {
     return(_periodBusyPercentage);
+}
+
+void AsyncTask::printMessage(msgQueue_t msgQueue) {
+    Serial.print("To: ");
+    Serial.print((int)_taskName);
+    Serial.print(" From: ");
+    Serial.print((int)msgQueue.taskFrom);
+    Serial.print(" Msg: ");
+    Serial.print((int)msgQueue.msg);
+    Serial.print(" Index: ");
+    Serial.print(msgQueue.index);
+    Serial.print(" Value: ");
+    Serial.print(msgQueue.value);
+    Serial.print(" ms: ");
+    Serial.println(millis());
 }

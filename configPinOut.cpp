@@ -4,8 +4,6 @@
 
 void pinModeConfig () {
 
-    //pinMode(INTERRUPT_PIN, INPUT);
-
     pinMode(DEBUG_PIN, OUTPUT);
     
 }

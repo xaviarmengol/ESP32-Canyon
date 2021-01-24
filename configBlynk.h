@@ -40,3 +40,7 @@ BLYNK_WRITE(V10) { // Is calibrated
 BLYNK_WRITE(V11) { // Fire Calibration
     gCalFire.set(param.asInt());
 }
+
+BLYNK_WRITE(V12) { // V0 calibration
+    gCalv0.set(param.asInt());
+}
