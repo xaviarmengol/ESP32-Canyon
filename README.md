@@ -31,6 +31,7 @@ Special tasks are used to deal with hardware in a thread safe way. Any task can 
 * tskGPIO: Task in charge of interact with IOs, Servos, etc..
 * tskI2C: Task in charge of interacting with I2C bus
 * tskWIFI: Task in charge of interacting with Wifi
+* tskPeriodicTimer: Very special task that is used to send a periodic timeout to every task, at a predefined frequency. It is used as a "clock" of the cyclic task of every task.
 
 
 ### SharedVar class
