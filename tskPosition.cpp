@@ -1,19 +1,17 @@
 #include <Arduino.h>
 
-#include "configPinOut.hpp"
 #include "configGlobalVars.hpp"
+#include "AsyncTaskMsg.hpp"
+#include "CtrlServoMsg.hpp"
 
-#include "CtrlServo.hpp"
-#include "CtrlTOF10120.hpp"
-#include "newtonMethod.hpp"
-
+#include "angleCalc.hpp"
 #include "FlankFilter.hpp"
 
 constexpr int POSITION_SERVO_LOW = 60;
 constexpr int POSITION_SERVO_HIGH = 82;
 
 // TODO: Could be static inside the State Machine
-enum struct ModeFire {search, toFire, fire, toSeach};
+enum struct ModeFire {search, toFire, fire, toSearch};
 
 void stateMachine(taskNames_t taskName);
 void fireControl(int modeNum, int lidarDist);
@@ -26,26 +24,23 @@ servoControl servoFire;
 
 FlankFilter flankCalibrate(true);
 
-
 void tskPosition(void *pvParameters){
 
-    Wire.begin(); 
+    //Wire.begin(); 
 
     // SETUP or the task
     Serial.println("Task Position on core: " + String(xPortGetCoreID()));
     TaskNames taskName = TaskNames::POSITION;
     int taskId = static_cast<int>(taskName);
+    AsyncTaskMsg async(taskName);
 
     int32_t periodMs = 20;
 
-    servoElev.attach(PIN_SERVO_ELEV);
-    servoRot.attach(PIN_SERVO_ROT);
-    servoFire.attach(PIN_SERVO_FIRE);
+    servoElev.attachIndex(0, taskName, true);
+    servoRot.attachIndex(1, taskName, true);
+    servoFire.attachIndex(2, taskName, true);
 
     calibrateServos();
-
-    TOF10120 lidar;
-    int lidarDist;
 
     tasksManager[taskId].modifyWaitMs(periodMs);
 
@@ -53,22 +48,19 @@ void tskPosition(void *pvParameters){
    
     while(1) {
 
-        if(tasksManager[taskId].hasPeriodElapsedWithExternalTimer()) {
-
-            lidar.update();
-            lidarDist = lidar.getDistance() / 10; // cm
-            gLidarDist.set(lidarDist);
-
-            fireControl(gModeNum.get(), lidarDist);
-
+        if(tasksManager[taskId].periodEnded()) {
+            fireControl(gModeNum.get(), gLidarDist.get());
             stateMachine(taskName);
-
+            
             gPeriodBusy[taskId].set(tasksManager[taskId].getBusyPercentage());
+            
+        } else {
+            async.update();
+
         }
     }
 
 }
-
 
 
 void calibrateServos() {
@@ -102,17 +94,22 @@ void fireControl(int modeNum, int lidarDist) {
             yTarget = (int)(sin(inpElev * DEG_TO_RAD ) * lidarDist);
         }
 
+        
+
         int solIni;
         bool solutionFound;
+        int angleTarget = 0;
 
+        /*
         if (gHighTraj.get() == 1) solIni=85; else solIni=15;
-
         int calv0 = gCalv0.get();
+        angleTarget = newtonMethod(xTarget, yTarget, (float)(calv0/100.0), solIni, solutionFound);
+        */
 
-        int angleTarget = newtonMethod(xTarget, yTarget, (float)(calv0/100.0), solIni, solutionFound);
+        solutionFound = angleCalculation(gCalv0.get(), xTarget, yTarget, gHighTraj.get(), angleTarget);
         if (!solutionFound) angleTarget = 0;
         
-        bool fireAllowed = solutionFound && (lidarDist<=195 || modeNum==3);
+        bool fireAllowed = solutionFound and (lidarDist<=195 || modeNum==3);
 
         gXTarget.set(xTarget);
         gYTarget.set(yTarget);
@@ -233,12 +230,12 @@ void stateMachine(taskNames_t taskName) {
 
             if ((millis() - millisFire) > 250) {
                 servoFire.writeTwoModes(0);
-                modeFire=ModeFire::toSeach;
+                modeFire=ModeFire::toSearch;
                 millisToSearch = millis();
                 inpFire=0;
             }
             
-        } if (modeFire == ModeFire::toSeach) {
+        } if (modeFire == ModeFire::toSearch) {
 
             servoElev.write(inpElevOld);
             servoRot.write(inpRotOld);

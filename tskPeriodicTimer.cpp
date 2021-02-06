@@ -39,6 +39,8 @@ void tskPeriodicTimer (void *pvParameters){
         //vTaskDelayUntil(&lastTime, pdMS_TO_TICKS(delayTime));
 
         // Send a message to the task (Value = Period Time)
+        //Serial.print("Sending MinIndex: ");
+        //Serial.println(minIndex);
         tasksManager[minIndex].sendMessage(AsyncMsg::PERIOD_TIME_OUT, taskName, 0, taskPeriod.at(minIndex) );
 
         if (delayTime > 0) {

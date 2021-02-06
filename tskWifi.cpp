@@ -2,6 +2,7 @@
 #include "configBlynk.h"
 #include "wifiUtils.h"
 #include "configGlobalVars.hpp"
+#include "AsyncTaskMsg.hpp"
 
 
 void tskWifi(void *pvParameters) {
@@ -9,6 +10,8 @@ void tskWifi(void *pvParameters) {
     Serial.println("Task Wifi on core: " + String(xPortGetCoreID()));
     TaskNames taskName = TaskNames::WIFI;
     int taskId = static_cast<int>(taskName);
+    AsyncTaskMsg async(taskName);
+
     unsigned long periods=0;
     
     InitWifi();
@@ -24,7 +27,7 @@ void tskWifi(void *pvParameters) {
 
     while(true) {
 
-        if (tasksManager[taskId].hasPeriodElapsedWithExternalTimer()) {
+        if (tasksManager[taskId].periodEnded()) {
 
             if ((periods % 1) == 0 ) {
                 Blynk.virtualWrite(V6, gLidarDist.get());
@@ -36,11 +39,10 @@ void tskWifi(void *pvParameters) {
 
             gPeriodBusy[taskId].set(tasksManager[taskId].getBusyPercentage());
 
-            //Serial.println("Period WIFI");
-
         } else { // Message management
+            async.update();
 
-            asyncMsg_t msg = tasksManager[taskId].getLastValidAsyncMsg();
+            asyncMsg_t msg = tasksManager[taskId].getMsgName();
             Serial.print("Executing Message: ");
             Serial.println(static_cast<int>(msg));
 

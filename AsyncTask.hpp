@@ -9,6 +9,8 @@
 
 #include <functional> // Call back
 
+#define DEBUG_MODE false
+
 constexpr int MAX_QUEUE = 10;
 constexpr unsigned long DEFAULT_PERIOD_MS = 10;
 constexpr int DEFAULT_MIN_WAIT_TASK_MS = 2;
@@ -19,6 +21,23 @@ typedef struct MessageQueue {
     taskNames_t taskFrom; // Task where the msg come from
     int32_t index; // Variable index
     int32_t value; // Value
+
+    /*
+    MessageQueue& operator = (const MessageQueue &t) { 
+        msg = t.msg;
+        taskFrom = t.taskFrom;
+        index = t.index;
+        value = t.value;
+    }
+
+    MessageQueue(const MessageQueue &t)  {  
+        msg = t.msg;
+        taskFrom = t.taskFrom;
+        index = t.index;
+        value = t.value;
+    }  
+    */
+   
 } msgQueue_t;
 
 class AsyncTask {
@@ -27,11 +46,17 @@ public:
     AsyncTask(taskNames_t taskName, unsigned long waitMs = 10);
     ~AsyncTask();
 
-    bool hasPeriodElapsedWithExternalTimer();
-    asyncMsg_t getLastValidAsyncMsg();
+    bool periodEnded();
     void modifyWaitMs(unsigned long newMs);
     unsigned long getWaitMs();
     int getBusyPercentage();
+
+    msgQueue_t getLastQueueMsg();
+
+    asyncMsg_t getMsgName();
+    taskNames_t getMsgTaskFrom();
+    int32_t getMsgIndex();
+    int32_t getMsgValue();
 
     void printMessage(msgQueue_t msgQueue);
 
@@ -42,17 +67,17 @@ public:
 
 private:
 
-    TaskHandle_t _taskHandler;
+    TaskHandle_t _taskHandler = new TaskHandle_t(); // Created in HEAP
 
     QueueHandle_t _queue;
     taskNames_t _taskName;
     unsigned long _periodMs = 10;
 
     asyncMsg_t _asyncMsgReceived = AsyncMsg::NO_MESSAGE;
-    asyncMsg_t _asyncMsgToSend = AsyncMsg::NO_MESSAGE;
+    //asyncMsg_t _asyncMsgToSend = AsyncMsg::NO_MESSAGE;
 
     msgQueue_t _msgQueueReceived = {AsyncMsg::NO_MESSAGE, TaskNames::DEBUG, -1, -1};
-    msgQueue_t _msgQueueToSend = {AsyncMsg::NO_MESSAGE, TaskNames::DEBUG, -1, -1};
+    //msgQueue_t _msgQueueToSend = {AsyncMsg::NO_MESSAGE, TaskNames::DEBUG, -1, -1};
 
     taskNames_t _taskFromMsgReceived;
     int32_t _indexMsgReceived;

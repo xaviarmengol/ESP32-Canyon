@@ -40,7 +40,7 @@ SharedVar<int> gAngleTarget; //=0;
 SharedVar<int> gRotTarget; //=0;
 SharedVar<int> gXAuto; //=120;
 SharedVar<int> gYAuto; //7=-11;
-SharedVar<int> gHighTraj; //=1; // 1 if high, 0 if low
+SharedVar<bool> gHighTraj; //=1; // 1 if high, 0 if low
 
 SharedVar<bool> gFireAllowed;
 SharedVar<bool> gCalibrate;

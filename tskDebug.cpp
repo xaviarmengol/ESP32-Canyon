@@ -3,6 +3,8 @@
 #include "configPinOut.hpp"
 #include "configGlobalVars.hpp"
 
+#include "AsyncTaskMsg.hpp"
+
 
 void tskDebug (void *pvParameters){
 
@@ -10,6 +12,7 @@ void tskDebug (void *pvParameters){
     Serial.println("Task Degug Loop on core: " + String(xPortGetCoreID()));
     TaskNames taskName = TaskNames::DEBUG;
     int taskId = static_cast<int>(taskName);
+    AsyncTaskMsg localData(taskName);
 
     bool blinkState = false;
 
@@ -18,7 +21,7 @@ void tskDebug (void *pvParameters){
     gTaskSetupFinished[taskId].set(true);
 
     while(1) {        
-        if(tasksManager[taskId].hasPeriodElapsedWithExternalTimer()) {
+        if(tasksManager[taskId].periodEnded()) {
             //gLidarDist.print("Lidar");
             gInpElev.print("Inp Elev");
             gInpRot.print("Inp Rot");
@@ -38,9 +41,10 @@ void tskDebug (void *pvParameters){
 
             gPeriodBusy[taskId].set(tasksManager[taskId].getBusyPercentage());
         } else {
+            localData.update();
 
             Serial.print("Debug Message received: ");
-            Serial.print((int)tasksManager[taskId].getLastValidAsyncMsg());
+            Serial.print((int)tasksManager[taskId].getMsgName());
             Serial.print(" at ");
             Serial.println(millis());
 

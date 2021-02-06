@@ -1,7 +1,5 @@
 #include "AsyncTask.hpp"
 
-/// Crear una interrupció periòdica que envii un missatge de "Periode" a cada tasca
-/// D'aquesta manera la tasca simplement es un receptor de missatges
 ///https://techtutorialsx.com/2017/10/07/esp32-arduino-timer-interrupts/#:~:text=The%20ESP32%20has%20two%20timer,the%20timer%20counter%20%5B2%5D.
 
 
@@ -31,10 +29,12 @@ bool AsyncTask::sendMessage(asyncMsg_t msg, taskNames_t taskFrom, int32_t index,
 
     bool returnValue=false;
 
+    msgQueue_t _msgQueueToSend = {AsyncMsg::NO_MESSAGE, TaskNames::DEBUG, -1, -1};
+
     _msgQueueToSend = {msg, taskFrom, index, value};
     returnValue = (xQueueSend(_queue, &_msgQueueToSend, 0) == pdTRUE);
 
-    if (taskFrom != TaskNames::_TIMER) {
+    if (DEBUG_MODE and taskFrom != TaskNames::_TIMER) {
         Serial.print("Sending message: ");
         if (!returnValue) Serial.print("ERROR "); else Serial.print("OK ");
         printMessage(_msgQueueToSend);
@@ -44,7 +44,7 @@ bool AsyncTask::sendMessage(asyncMsg_t msg, taskNames_t taskFrom, int32_t index,
     return(returnValue);
 }
 
-bool AsyncTask::hasPeriodElapsedWithExternalTimer() {
+bool AsyncTask::periodEnded() {
     if (_queue == 0 ) {
         Serial.println("Queue NOT well created");
     } 
@@ -60,10 +60,12 @@ bool AsyncTask::hasPeriodElapsedWithExternalTimer() {
         _totalPeriodAsyncMicros += _periodAsyncMsgMicros;
     }
 
+    _msgQueueReceived = {AsyncMsg::NO_MESSAGE, TaskNames::DEBUG, -1, -1};
+
     // Block until Message
     xQueueReceive(_queue, &_msgQueueReceived, portMAX_DELAY);
 
-    if (_msgQueueReceived.taskFrom != TaskNames::_TIMER) {
+    if (DEBUG_MODE and _msgQueueReceived.taskFrom != TaskNames::_TIMER) {
         Serial.print("Receiving message: ");
         printMessage(_msgQueueReceived);
     }
@@ -89,9 +91,23 @@ bool AsyncTask::hasPeriodElapsedWithExternalTimer() {
     return(_periodElapsed);
 }
 
+msgQueue_t AsyncTask::getLastQueueMsg() {
+    return(_msgQueueReceived);
+}
 
-asyncMsg_t AsyncTask::getLastValidAsyncMsg() {
+
+asyncMsg_t AsyncTask::getMsgName() {
     return(_asyncMsgReceived);
+}
+
+taskNames_t AsyncTask::getMsgTaskFrom() {
+    return(_taskFromMsgReceived);
+}
+int32_t AsyncTask::getMsgIndex() {
+    return(_indexMsgReceived);
+}
+int32_t AsyncTask::getMsgValue() {
+    return(_valueMsgReceived);
 }
 
 void AsyncTask::modifyWaitMs(unsigned long newMs) {

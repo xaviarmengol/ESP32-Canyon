@@ -4,6 +4,7 @@
 #include "SharedVar.hpp"
 #include "AsyncTask.hpp"
 
+
 // Aplication specific
 enum ModeRun {STOP, HOME, MAN, AUTO, LASER, TOTAL_ModeRun};
 
@@ -46,7 +47,7 @@ extern SharedVar<int> gAngleTarget; //=0;
 extern SharedVar<int> gRotTarget; //=0;
 extern SharedVar<int> gXAuto; //=120;
 extern SharedVar<int> gYAuto; //7=-11;
-extern SharedVar<int> gHighTraj; //=1; // 1 if high, 0 if low
+extern SharedVar<bool> gHighTraj; //=1; // 1 if high, 0 if low
 
 
 extern SharedVar<bool> gFireAllowed;

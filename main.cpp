@@ -9,11 +9,14 @@ void waitUntilSetupEnds(int tskNum);
 // Task Periodic timer to fire Period Timers
 void tskPeriodicTimer (void *pvParameters);
 
+// Task fordward decl. Hardware
+void tskWifi (void *pvParameters);
+void tskI2C (void *pvParameters);
+void tskGPIO (void *pvParameters);
+
 // Task fordward declaration. Can be in a hpp file
 void tskPosition (void *pvParameters);
-void tskWifi (void *pvParameters);
 void tskDebug (void *pvParameters);
-
 
 void setup() {
 
@@ -24,10 +27,10 @@ void setup() {
     // Initialize global variables
 
     // Calibration
-    gCalRot.set(90);
+    gCalRot.set(90 - 10);
     gCalElev.set(90);
-    gCalFire.set(-10);
-    gCalv0.set(478);
+    gCalFire.set(0);
+    gCalv0.set(478); // cm/s
     gCalHardOffset.set(0);
 
     gCalibrate.set(false);
@@ -35,7 +38,7 @@ void setup() {
     // Target management
     gXAuto.set(120);
     gYAuto.set(-11);
-    gHighTraj.set(1); // 1 if high, 0 if low
+    gHighTraj.set(true); // 1 if high, 0 if low
 
     // Mode management
     gModeNum.set(ModeRun::STOP);
@@ -51,20 +54,24 @@ void setup() {
     // TODO: Understant what is the best core asignment strategy
 
     // Wifi, first task to setup and in core 1. If not, it crash
-    xTaskCreateUniversal(tskWifi, "TaskWifi", 10000, NULL, 0, tasksManager[WIFI].getTaskHandler(), 1);
-    waitUntilSetupEnds(WIFI);
+    xTaskCreateUniversal(tskWifi, "TaskWifi", 10000, NULL, 1, tasksManager[TaskNames::WIFI].getTaskHandler(), 1);
+    waitUntilSetupEnds(TaskNames::WIFI);
+
+    xTaskCreateUniversal(tskI2C, "TaskI2C", 10000, NULL, 3, tasksManager[TaskNames::I2C].getTaskHandler(), 1);
+    waitUntilSetupEnds(TaskNames::I2C);
+
+    xTaskCreateUniversal(tskGPIO, "TaskGPIO", 10000, NULL, 2, tasksManager[TaskNames::HARD_IO].getTaskHandler(), 1);
+    waitUntilSetupEnds(TaskNames::HARD_IO);
     
     // Control tsk in 0, others in 1 (Arduino)
-    xTaskCreateUniversal(tskPosition, "TskPosition", 10000, NULL, 3, tasksManager[POSITION].getTaskHandler(), 0);
-    waitUntilSetupEnds(POSITION);
+    xTaskCreateUniversal(tskPosition, "TskPosition", 10000, NULL, 3, tasksManager[TaskNames::POSITION].getTaskHandler(), 0);
+    waitUntilSetupEnds(TaskNames::POSITION);
     
-    xTaskCreateUniversal(tskDebug, "TaskDebug", 10000, NULL, 0, tasksManager[DEBUG].getTaskHandler(), 1);
-    waitUntilSetupEnds(DEBUG);
+    xTaskCreateUniversal(tskDebug, "TaskDebug", 10000, NULL, 0, tasksManager[TaskNames::DEBUG].getTaskHandler(), 1);
+    waitUntilSetupEnds(TaskNames::DEBUG);
 
-    // Periodic timer fires messages at some freq.
-
-    xTaskCreateUniversal(tskPeriodicTimer, "PERIODIC_TIMER", 10000, NULL, 0, &periodicTimerHandler, 1);
-    waitUntilSetupEnds(DEBUG);
+    // Periodic timer fires messages at some freq. Maximum priority.
+    xTaskCreateUniversal(tskPeriodicTimer, "PERIODIC_TIMER", 10000, NULL, 4, &periodicTimerHandler, 1);
 
     Serial.println("Setup end");
 }
